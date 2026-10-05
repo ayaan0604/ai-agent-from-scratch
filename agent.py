@@ -51,7 +51,7 @@ def read_memory()-> str:
 def save_memory(fact: str)-> str:
     '''save a fact about the user in the memory'''
     with MEMORY_FILE.open("a", encoding='utf-8') as f:
-        f.write(f"-{fact} \n")
+        f.write(f"- {fact} \n")
     return f'saevd: {fact}'
     
 
@@ -136,9 +136,9 @@ TOOLS_SCHEMAS = [
     }
 ]
 
-def chat(messages =[])-> str:
+def chat(messages =[], max_iter = 10)-> str:
 
-    while True:
+    for _ in range(max_iter):
 
         response = client.chat.completions.create(
             model = model,
@@ -158,7 +158,15 @@ def chat(messages =[])-> str:
             args = json.loads(call.function.arguments or "{}")
             print(f"[TOOL] : {call.function.name}({args})")
 
-            result = TOOLS[call.function.name](**args)
+            tool = TOOLS.get(call.function.name)
+            if not tool:
+                result = f"Error: Unknown tool : {call.function.name}"
+
+            else:
+                try: 
+                    result = tool(**args)
+                except Exception as e:
+                    result = f"toll error: {e}"
 
             messages.append(
                 {'role' : 'tool', 'tool_call_id': call.id, 'content': result}
@@ -167,9 +175,34 @@ def chat(messages =[])-> str:
 
 
 SYSTEM_PROMPT = '''
-    You are a helpful personal assistant.
-    You can add and load memeories
-    Whenever you find a new fact about the user, save it into the persisten memory.
+You are a helpful personal assistant with access to a user's workspace
+and persistent memory.
+
+You can:
+- inspect files in the workspace
+- read files
+- create or modify files
+- read persistent memories
+- save useful facts about the user
+
+Use tools whenever they are necessary to fulfill the user's request.
+
+MEMORY RULES:
+- Save information only when it is a useful, reasonably stable fact
+  about the user.
+- Do not save temporary statements, casual conversation, or task-specific
+  information unless the user explicitly asks you to remember it.
+- If the user explicitly says "remember this", save it.
+- Before answering questions about what you remember about the user,
+  use read_memory.
+
+WORKSPACE RULES:
+- Never claim to have inspected a file unless you actually used read_file.
+- Never claim to have created or modified a file unless you actually
+  used write_file.
+- You may call multiple tools when a task requires multiple steps.
+- After receiving tool results, decide whether another tool is needed
+  or whether you can answer the user.
 '''
 
 if __name__ == "__main__":
