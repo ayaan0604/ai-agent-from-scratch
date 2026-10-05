@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 import json
 
+
+
 dotenv.load_dotenv()
 
 gemini_api_key = os.environ.get("GEMINI_API_KEY")
 
 WORKSPACE = Path(__file__).parent / 'workspace'
-
+MEMORY_FILE = Path(__file__).parent/ "memory.md"
 
 
 
@@ -40,13 +42,26 @@ def write_file(file_name: str, content: str)->str:
 
     return f"wrote {file_name}"
         
+def read_memory()-> str:
+    '''read all the facts stored'''
+    if MEMORY_FILE.is_file():
+        return MEMORY_FILE.read_text()
+    return "nothing saved yet"
 
+def save_memory(fact: str)-> str:
+    '''save a fact about the user in the memory'''
+    with MEMORY_FILE.open("a", encoding='utf-8') as f:
+        f.write(f"-{fact} \n")
+    return f'saevd: {fact}'
+    
 
 
 TOOLS = {
     'list_files' : list_files,
     'read_file' : read_file,
-    'write_file' : write_file
+    'write_file' : write_file,
+    'read_memory' : read_memory,
+    'save_memory' : save_memory
 }
 
 TOOLS_SCHEMAS = [
@@ -91,15 +106,37 @@ TOOLS_SCHEMAS = [
                 'required' : ['file_name', 'content' ]
             }
         }
+    },
+
+    {
+        'type' : "function",
+        'function' : {
+            'name' : 'save_memory',
+            'description' : "save a fact about the user in the memory" ,
+            'parameters' : {
+                'type' : 'object',
+                'properties' : {
+                    'fact' : {'type' : "string"}
+                },
+                'required' : ['fact' ]
+            }
+        }
+    },
+
+    {
+        'type' : "function",
+        'function' : {
+            'name' : 'read_memory',
+            'description' : "add a fact in the persistent memory that can be retrieved later" ,
+            'parameters' : {
+                'type' : 'object',
+                'properties' : {}
+            }
+        }
     }
 ]
 
-def chat(user_message: str, messages =[])-> str:
-
-    messages = [
-            { 'role': "system", 'content' : "You are a helpful personal assistant" },
-            {'role': "user", 'content' : user_message }
-        ]
+def chat(messages =[])-> str:
 
     while True:
 
@@ -128,17 +165,22 @@ def chat(user_message: str, messages =[])-> str:
             )
 
 
-    # final = client.chat.completions.create(
-    #     model = model, messages = messages
-    # )
 
-    # return final.choices[0].message.content or ""
+SYSTEM_PROMPT = '''
+    You are a helpful personal assistant.
+    You can add and load memeories
+    Whenever you find a new fact about the user, save it into the persisten memory.
+'''
 
 if __name__ == "__main__":
     print(f"v0 assistant ({model}), ctrl+c to quit")
+    messages = [
+        {'role': 'system', 'content':SYSTEM_PROMPT}
+    ]
     try:
         while True:
             user_message = input("Enter your message: ")
-            print('assistant: ', chat(user_message))
+            messages.append({'role': "user", 'content' : user_message})
+            print('assistant: ', chat(messages))
     except(EOFError, KeyboardInterrupt):
         print("bye")
