@@ -33,11 +33,20 @@ def read_file(file_name: str)-> str:
 
     return path.read_text(encoding='utf-8')
 
+def write_file(file_name: str, content: str)->str:
+    '''write or overwrite a file in workdir'''
+
+    (WORKSPACE / file_name).write_text(content, encoding='utf-8')
+
+    return f"wrote {file_name}"
+        
+
 
 
 TOOLS = {
     'list_files' : list_files,
-    'read_file' : read_file
+    'read_file' : read_file,
+    'write_file' : write_file
 }
 
 TOOLS_SCHEMAS = [
@@ -66,43 +75,64 @@ TOOLS_SCHEMAS = [
                 'required' : ['file_name']
             }
         }
+    },
+
+    {
+        'type' : "function",
+        'function' : {
+            'name' : 'write_file',
+            'description' : "write or overwrite user's workspace directory" ,
+            'parameters' : {
+                'type' : 'object',
+                'properties' : {
+                    'file_name' : {'type' : "string"},
+                    'content' : {'type' :'string'}
+                },
+                'required' : ['file_name', 'content' ]
+            }
+        }
     }
 ]
 
-def chat(user_message: str)-> str:
+def chat(user_message: str, messages =[])-> str:
 
     messages = [
             { 'role': "system", 'content' : "You are a helpful personal assistant" },
             {'role': "user", 'content' : user_message }
         ]
 
-    response = client.chat.completions.create(
-        model = model,
-        messages = messages,
-        tools= TOOLS_SCHEMAS
-    )
+    while True:
 
-    message =  response.choices[0].message
-    if not message.tool_calls:
-        return message.content or ""
-
-    messages.append(message)
-    
-    for call in message.tool_calls:
-        args = json.loads(call.function.arguments or "{}")
-        print(f"[TOOL] : {call.function.name}({args})")
-
-        result = TOOLS[call.function.name](**args)
-
-        messages.append(
-            {'role' : 'tool', 'tool_call_id': call.id, 'content': result}
+        response = client.chat.completions.create(
+            model = model,
+            messages = messages,
+            tools= TOOLS_SCHEMAS
         )
 
-    final = client.chat.completions.create(
-        model = model, messages = messages
-    )
+        message =  response.choices[0].message
 
-    return final.choices[0].message.content or ""
+        if not message.tool_calls:
+            return message.content or ""
+
+
+        messages.append(message)
+        
+        for call in message.tool_calls:
+            args = json.loads(call.function.arguments or "{}")
+            print(f"[TOOL] : {call.function.name}({args})")
+
+            result = TOOLS[call.function.name](**args)
+
+            messages.append(
+                {'role' : 'tool', 'tool_call_id': call.id, 'content': result}
+            )
+
+
+    # final = client.chat.completions.create(
+    #     model = model, messages = messages
+    # )
+
+    # return final.choices[0].message.content or ""
 
 if __name__ == "__main__":
     print(f"v0 assistant ({model}), ctrl+c to quit")
